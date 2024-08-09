@@ -48,6 +48,45 @@ def calculate_historical_growth_rate(financials):
     worst_case = avg_growth_rate + growth_rates.std()
     return 1+(-1*avg_growth_rate), 1+(-1*best_case), 1+(-1*worst_case)
 
+def calculate_wacc(company):
+    # Get the beta value
+    beta = company.info.get('beta')
+    if beta is None:
+        raise ValueError("Beta value is not available for this company.")
+
+    # Cost of Equity using CAPM
+    risk_free_rate = 0.03
+    market_return = 0.08
+    cost_of_equity = risk_free_rate + beta * (market_return - risk_free_rate)
+
+    # Cost of Debt
+    interest_expense = company.financials.loc['Interest Expense'][0]
+    total_debt = company.balance_sheet.loc['Total Debt'][0]
+    if total_debt == 0:
+        raise ValueError("Total debt is zero; cannot calculate cost of debt.")
+    cost_of_debt = interest_expense / total_debt
+
+    # Market Capitalization and Total Debt for Capital Structure
+    market_cap = company.info.get('marketCap')
+    if market_cap is None:
+        raise ValueError("Market capitalization is not available for this company.")
+
+    total_equity = market_cap
+    total_debt = company.balance_sheet.loc['Total Debt'][0]
+    total_value = total_equity + total_debt
+
+    # Proportions of Equity and Debt
+    equity_ratio = total_equity / total_value
+    debt_ratio = total_debt / total_value
+
+    # Tax Rate
+    tax_rate = company.financials.loc["Tax Rate For Calcs"][0]
+
+    # WACC Calculation
+    wacc = (cost_of_equity * equity_ratio) + (cost_of_debt * debt_ratio * (1 - tax_rate))
+    
+    return wacc
+
 def main():
     # Validate stock ticker
     company = is_valid_ticker(sys.argv[1])
@@ -122,9 +161,9 @@ def main():
 
     # Depreciation and Amortization Projections
     future_dep = []
-    dep_as_perc_of_capex = (merged_df.loc['Reconciled Depreciation'] / merged_df.loc['Capital Expenditure']).mean()
+    avg_depreciation = (merged_df.loc['Reconciled Depreciation']).mean()
     for i in range(years):
-        future_dep.append((future_capex[i] * dep_as_perc_of_capex))
+        future_dep.append(avg_depreciation)
 
 
     # FCF Calculations
@@ -134,11 +173,17 @@ def main():
         FCF = (ebit * (1- merged_df.loc['Tax Rate For Calcs'][0])) + future_dep[i] - future_change_working_cap[i] + future_capex[i]
         future_fcf.append(FCF)
         
-
+    wacc = calculate_wacc(company)
+    pv_fcf = []
+    g = 0.03
     for i in range(years):
-        print(f"Year {i+1}: {int(future_revenue[i]):,}")
-       #print(f"Year {i+1}: {int(future_fcf[i]):,}")
-
+        pv_fcf.append(future_fcf[i] / ((1 + wacc) ** (i + 1)))
+    pv_terminal_value = ((future_fcf[-1] * (1+g)) / (wacc-g)) / ((1+wacc)**years)
+    equity_value = sum(pv_fcf) + pv_terminal_value - company.balance_sheet.loc['Net Debt'][0]
+    estimated_price = equity_value / company.info.get('sharesOutstanding')
+    print(f"Estimated: {estimated_price}")
+    print(f"Day Low: {company.info.get('dayLow')}")
+    print(f"Day High: {company.info.get('dayHigh')}")
 
 if __name__ == "__main__":
     main()
