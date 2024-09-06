@@ -1,2 +1,2 @@
 # DCF_Calculator
-Discounted Cash Flow Calculator
+A discounted cash flow calculator developed to streamline the process of calculating the DCF for any publicly traded company. Pulls financial data from yfinance API and returns descriptive error messages when necessary information is unavailable. Forecasts multiple revenue growth cases to allow users to simulate base, bear, or bull scenarios. Projects other relevant line items based on historical relationship to revenue. 
